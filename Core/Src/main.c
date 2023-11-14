@@ -49,6 +49,10 @@ TIM_HandleTypeDef htim1;
 /* USER CODE BEGIN PV */
 FDCAN_RxHeaderTypeDef rxHeader;
 uint8_t rxData[8];
+
+uint8_t index = 0;
+//const uint16_t angles[4] = {0, 90, 180, 270};
+const uint16_t angles[4] = {500, 1167, 1833, 2500};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -74,6 +78,9 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 		if(rxHeader.DataLength == FDCAN_DLC_BYTES_2)
 		{
 			// Do stuff
+			index++;
+			index %= 4;
+			TIM1->CCR1 = angles[index];
 			HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 		}
 
@@ -124,15 +131,13 @@ int main(void)
   MX_FDCAN1_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
-  if(HAL_FDCAN_Start(&hfdcan1) != HAL_OK)
-  {
-    Error_Handler();
-  }
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
 
-  if(HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK)
-  {
-    Error_Handler();
-  }
+  HAL_FDCAN_Start(&hfdcan1);
+  HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
   /* USER CODE END 2 */
 
   /* Infinite loop */
