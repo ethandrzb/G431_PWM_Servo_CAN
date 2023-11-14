@@ -51,8 +51,8 @@ FDCAN_RxHeaderTypeDef rxHeader;
 uint8_t rxData[8];
 
 uint8_t index = 0;
-//const uint16_t angles[4] = {0, 90, 180, 270};
-const uint16_t angles[4] = {500, 1167, 1833, 2500};
+const uint16_t angles[4] = {0, 90, 180, 270};
+//const uint16_t angles[4] = {500, 1167, 1833, 2500};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -62,6 +62,11 @@ static void MX_LPUART1_UART_Init(void);
 static void MX_FDCAN1_Init(void);
 static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
+uint32_t degreesToPWM(int16_t degrees);
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
 	// Check for new messages
@@ -80,7 +85,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 			// Do stuff
 			index++;
 			index %= 4;
-			TIM1->CCR1 = angles[index];
+			TIM1->CCR1 = degreesToPWM(angles[index]);
 			HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 		}
 
@@ -92,11 +97,19 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 		}
 	}
 }
-/* USER CODE END PFP */
+uint32_t degreesToPWM(int16_t degrees)
+{
+	// Validate range
+	if(degrees < 0 || degrees > 270)
+	{
+		// Can use this as error value b/c pulse will never be this thin
+		return 0;
+	}
 
-/* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
+	// newValue = (-1 if flipped, 1 if not) * oldValue * (newRange / oldRange) + newRangeOffset
 
+	return degrees * (2000.0 / 270.0) + 500;
+}
 /* USER CODE END 0 */
 
 /**
