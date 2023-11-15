@@ -50,9 +50,6 @@ TIM_HandleTypeDef htim1;
 FDCAN_RxHeaderTypeDef rxHeader;
 uint8_t rxData[8];
 
-uint8_t index = 0;
-const uint16_t angles[4] = {0, 90, 180, 270};
-//const uint16_t angles[4] = {500, 1167, 1833, 2500};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -82,10 +79,29 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 		// Will likely need to be converted to a switch statement as more commands are implemented
 		if(rxHeader.DataLength == FDCAN_DLC_BYTES_2)
 		{
-			// Do stuff
-			index++;
-			index %= 4;
-			TIM1->CCR1 = degreesToPWM(angles[index]);
+			// Get angle from message
+			uint16_t tmp = 0;
+
+			tmp += rxData[0];
+			tmp <<= 8;
+			tmp += rxData[1];
+
+			switch(rxHeader.Identifier)
+			{
+				case 0x10:
+					TIM1->CCR1 = degreesToPWM(tmp);
+					break;
+				case 0x11:
+					TIM1->CCR2 = degreesToPWM(tmp);
+					break;
+				case 0x12:
+					TIM1->CCR3 = degreesToPWM(tmp);
+					break;
+				case 0x13:
+					TIM1->CCR4 = degreesToPWM(tmp);
+					break;
+			}
+
 			HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 		}
 
