@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,7 +31,12 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+//#define EXAMPLE_1
+#define EXAMPLE_2
 
+#define PI 3.1415926535897932384626433
+
+#define q31_to_f32(x) ldexp((int32_t) x, -31)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -40,6 +45,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+CORDIC_HandleTypeDef hcordic;
+
 FDCAN_HandleTypeDef hfdcan1;
 
 UART_HandleTypeDef hlpuart1;
@@ -47,6 +54,8 @@ UART_HandleTypeDef hlpuart1;
 TIM_HandleTypeDef htim1;
 
 /* USER CODE BEGIN PV */
+uint8_t sin_delay = 0;
+
 FDCAN_RxHeaderTypeDef rxHeader;
 uint8_t rxData[8];
 
@@ -58,12 +67,61 @@ static void MX_GPIO_Init(void);
 static void MX_LPUART1_UART_Init(void);
 static void MX_FDCAN1_Init(void);
 static void MX_TIM1_Init(void);
+static void MX_CORDIC_Init(void);
 /* USER CODE BEGIN PFP */
 uint32_t degreesToPWM(int16_t degrees);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+// Converts a 32-bit float to a q1.31 notation int
+static inline int f32_to_q31(double input)
+{
+	const float Q31_MAX_F = 0x0.FFFFFFp0F;
+	const float Q31_MIN_F = -1.0F;
+	return (int)roundf(scalbnf(fmaxf(fminf(input, Q31_MAX_F), Q31_MIN_F), 31));
+}
+
+// Computes the sin of x in radians
+static inline float cordic_q31_sinf(float x)
+{
+	CORDIC_ConfigTypeDef sConfig;
+	int32_t input_q31 = f32_to_q31(fmod(x, 2.0f * PI) / (2.0f * PI)) << 1;
+	int32_t output_q31;
+
+	sConfig.Function = CORDIC_FUNCTION_SINE;
+	sConfig.Precision = CORDIC_PRECISION_6CYCLES;
+	sConfig.Scale = CORDIC_SCALE_0;
+	sConfig.NbWrite = CORDIC_NBWRITE_1;
+	sConfig.NbRead= CORDIC_NBREAD_1;
+	sConfig.InSize = CORDIC_INSIZE_32BITS;
+	sConfig.OutSize = CORDIC_OUTSIZE_32BITS;
+	HAL_CORDIC_Configure(&hcordic, &sConfig);
+	HAL_CORDIC_CalculateZO(&hcordic, &input_q31, &output_q31, 1, 0);
+
+	return q31_to_f32(output_q31);
+}
+
+// Computes the cos of x in radians
+static inline float cordic_q31_cosf(float x)
+{
+	CORDIC_ConfigTypeDef sConfig;
+	int32_t input_q31 = f32_to_q31(fmod(x, 2.0f * PI) / (2.0f * PI)) << 1;
+	int32_t output_q31;
+
+	sConfig.Function = CORDIC_FUNCTION_COSINE;
+	sConfig.Precision = CORDIC_PRECISION_6CYCLES;
+	sConfig.Scale = CORDIC_SCALE_0;
+	sConfig.NbWrite = CORDIC_NBWRITE_1;
+	sConfig.NbRead= CORDIC_NBREAD_1;
+	sConfig.InSize = CORDIC_INSIZE_32BITS;
+	sConfig.OutSize = CORDIC_OUTSIZE_32BITS;
+	HAL_CORDIC_Configure(&hcordic, &sConfig);
+	HAL_CORDIC_CalculateZO(&hcordic, &input_q31, &output_q31, 1, 0);
+
+	return q31_to_f32(output_q31);
+}
+
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
 	// Check for new messages
@@ -104,6 +162,12 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 
 			HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 		}
+		else if(rxHeader.DataLength == FDCAN_DLC_BYTES_1)
+		{
+		  sin_delay = rxData[0];
+
+		  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+		}
 
 		// Re-activate message notifications
 		// HAL disables them when a message is received, so they need to be reactivated after every message
@@ -135,7 +199,9 @@ uint32_t degreesToPWM(int16_t degrees)
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
+	double radian = 0.0f;
+	float cosResult = 0.0f;
+	float sinResult = 0.0f;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -159,6 +225,7 @@ int main(void)
   MX_LPUART1_UART_Init();
   MX_FDCAN1_Init();
   MX_TIM1_Init();
+  MX_CORDIC_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
@@ -173,6 +240,24 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+#ifdef EXAMPLE_2
+	  for (int i = 0; i <= 360; i++)
+	  {
+		  // Convert degrees to radians
+		  radian = (double)(i) * 2.0 * PI / 360.0;
+
+		  // Comment UART print statement and uncomment write pin statements below
+		  // to measure CORDIC calculation time
+		  cosResult = cordic_q31_cosf(radian);
+		  sinResult = cordic_q31_sinf(radian);
+		  TIM1->CCR1 = degreesToPWM(floor(sinResult * 90.0f) + 90.0f);
+		  TIM1->CCR2 = degreesToPWM(floor(cosResult * 90.0f) + 90.0f);
+		  TIM1->CCR3 = degreesToPWM(floor(sinResult * -90.0f) + 90.0f);
+		  TIM1->CCR4 = degreesToPWM(floor(cosResult * -90.0f) + 90.0f);
+
+		  HAL_Delay(sin_delay);
+	  }
+#endif
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -224,6 +309,32 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief CORDIC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_CORDIC_Init(void)
+{
+
+  /* USER CODE BEGIN CORDIC_Init 0 */
+
+  /* USER CODE END CORDIC_Init 0 */
+
+  /* USER CODE BEGIN CORDIC_Init 1 */
+
+  /* USER CODE END CORDIC_Init 1 */
+  hcordic.Instance = CORDIC;
+  if (HAL_CORDIC_Init(&hcordic) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN CORDIC_Init 2 */
+
+  /* USER CODE END CORDIC_Init 2 */
+
 }
 
 /**
