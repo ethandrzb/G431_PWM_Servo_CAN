@@ -52,9 +52,10 @@ FDCAN_HandleTypeDef hfdcan1;
 UART_HandleTypeDef hlpuart1;
 
 TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim6;
 
 /* USER CODE BEGIN PV */
-uint8_t sin_delay = 0;
+uint16_t phaseAngle = 0;
 
 FDCAN_RxHeaderTypeDef rxHeader;
 uint8_t rxData[8];
@@ -68,6 +69,7 @@ static void MX_LPUART1_UART_Init(void);
 static void MX_FDCAN1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_CORDIC_Init(void);
+static void MX_TIM6_Init(void);
 /* USER CODE BEGIN PFP */
 uint32_t degreesToPWM(int16_t degrees);
 /* USER CODE END PFP */
@@ -137,6 +139,9 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 		// Will likely need to be converted to a switch statement as more commands are implemented
 		if(rxHeader.DataLength == FDCAN_DLC_BYTES_2)
 		{
+			// Stop metachronal timer if necessary
+			HAL_TIM_Base_Stop_IT(&htim6);
+
 			// Get angle from message
 			uint16_t tmp = 0;
 
@@ -164,7 +169,16 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 		}
 		else if(rxHeader.DataLength == FDCAN_DLC_BYTES_1)
 		{
-		  sin_delay = rxData[0];
+			// Stop metachronal wave when a single zero is received
+			if(rxData[0] == 0)
+			{
+				HAL_TIM_Base_Stop_IT(&htim6);
+			}
+			else
+			{
+				TIM6->ARR = rxData[0] * 1000;
+				HAL_TIM_Base_Start_IT(&htim6);
+			}
 
 		  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 		}
@@ -190,6 +204,30 @@ uint32_t degreesToPWM(int16_t degrees)
 
 	return degrees * (2000.0 / 270.0) + 500;
 }
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
+{
+	if(htim == &htim6)
+	{
+		double radian = 0.0f;
+		float cosResult = 0.0f;
+		float sinResult = 0.0f;
+
+		phaseAngle++;
+		phaseAngle %= 360;
+
+		// Convert degrees to radians
+		radian = (double)(phaseAngle) * 2.0 * PI / 360.0;
+
+		cosResult = cordic_q31_cosf(radian);
+		sinResult = cordic_q31_sinf(radian);
+
+		TIM1->CCR1 = degreesToPWM(floor(sinResult * 90.0f) + 90.0f);
+		TIM1->CCR2 = degreesToPWM(floor(cosResult * 90.0f) + 90.0f);
+		TIM1->CCR3 = degreesToPWM(floor(sinResult * -90.0f) + 90.0f);
+		TIM1->CCR4 = degreesToPWM(floor(cosResult * -90.0f) + 90.0f);
+	}
+}
 /* USER CODE END 0 */
 
 /**
@@ -199,9 +237,7 @@ uint32_t degreesToPWM(int16_t degrees)
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	double radian = 0.0f;
-	float cosResult = 0.0f;
-	float sinResult = 0.0f;
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -226,11 +262,17 @@ int main(void)
   MX_FDCAN1_Init();
   MX_TIM1_Init();
   MX_CORDIC_Init();
+  MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
+
+  // Servo PWM
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
+
+  // Metachronal update timer
+//  HAL_TIM_Base_Start_IT(&htim6);
 
   HAL_FDCAN_Start(&hfdcan1);
   HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
@@ -240,24 +282,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-#ifdef EXAMPLE_2
-	  for (int i = 0; i <= 360; i++)
-	  {
-		  // Convert degrees to radians
-		  radian = (double)(i) * 2.0 * PI / 360.0;
-
-		  // Comment UART print statement and uncomment write pin statements below
-		  // to measure CORDIC calculation time
-		  cosResult = cordic_q31_cosf(radian);
-		  sinResult = cordic_q31_sinf(radian);
-		  TIM1->CCR1 = degreesToPWM(floor(sinResult * 90.0f) + 90.0f);
-		  TIM1->CCR2 = degreesToPWM(floor(cosResult * 90.0f) + 90.0f);
-		  TIM1->CCR3 = degreesToPWM(floor(sinResult * -90.0f) + 90.0f);
-		  TIM1->CCR4 = degreesToPWM(floor(cosResult * -90.0f) + 90.0f);
-
-		  HAL_Delay(sin_delay);
-	  }
-#endif
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -538,6 +562,44 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 2 */
   HAL_TIM_MspPostInit(&htim1);
+
+}
+
+/**
+  * @brief TIM6 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM6_Init(void)
+{
+
+  /* USER CODE BEGIN TIM6_Init 0 */
+
+  /* USER CODE END TIM6_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM6_Init 1 */
+
+  /* USER CODE END TIM6_Init 1 */
+  htim6.Instance = TIM6;
+  htim6.Init.Prescaler = 170-1;
+  htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim6.Init.Period = 2999;
+  htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim6, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM6_Init 2 */
+
+  /* USER CODE END TIM6_Init 2 */
 
 }
 
