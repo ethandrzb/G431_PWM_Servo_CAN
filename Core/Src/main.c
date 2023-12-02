@@ -176,6 +176,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 			}
 			else
 			{
+				// Update metachronal wave period
 				TIM6->ARR = rxData[0] * 1000;
 				HAL_TIM_Base_Start_IT(&htim6);
 			}
