@@ -58,7 +58,9 @@ TIM_HandleTypeDef htim6;
 uint16_t phaseAngle = 0;
 
 FDCAN_RxHeaderTypeDef rxHeader;
+FDCAN_TxHeaderTypeDef txHeader;
 uint8_t rxData[8];
+uint8_t txData[8];
 
 /* USER CODE END PV */
 
@@ -169,19 +171,31 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 		}
 		else if(rxHeader.DataLength == FDCAN_DLC_BYTES_1)
 		{
-			// Stop metachronal wave when a single zero is received
-			if(rxData[0] == 0)
+			if(rxHeader.RxFrameType == FDCAN_DATA_FRAME)
 			{
-				HAL_TIM_Base_Stop_IT(&htim6);
-			}
-			else
-			{
-				// Update metachronal wave period
-				TIM6->ARR = rxData[0] * 1000;
-				HAL_TIM_Base_Start_IT(&htim6);
-			}
+				// Stop metachronal wave when a single zero is received
+				if(rxData[0] == 0)
+				{
+					HAL_TIM_Base_Stop_IT(&htim6);
+				}
+				else
+				{
+					// Update metachronal wave period
+					TIM6->ARR = rxData[0] * 1000;
+					HAL_TIM_Base_Start_IT(&htim6);
+				}
 
-		  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+				HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+			}
+			else if(rxHeader.RxFrameType == FDCAN_REMOTE_FRAME)
+			{
+				// Send heart beat response
+				txData[0] = 0x10;
+				txHeader.DataLength = FDCAN_DLC_BYTES_1;
+				HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &txHeader, txData);
+
+				HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+			}
 		}
 
 		// Re-activate message notifications
@@ -274,6 +288,16 @@ int main(void)
 
   // Metachronal update timer
 //  HAL_TIM_Base_Start_IT(&htim6);
+
+  // Initialize txHeader
+  txHeader.Identifier = 0x01; // CHANGE THIS ID BEFORE TRANSMITTING
+  txHeader.IdType = FDCAN_STANDARD_ID;
+  txHeader.TxFrameType = FDCAN_DATA_FRAME;
+  txHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+  txHeader.BitRateSwitch = FDCAN_BRS_OFF;
+  txHeader.FDFormat = FDCAN_CLASSIC_CAN;
+  txHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+  txHeader.MessageMarker = 0;
 
   HAL_FDCAN_Start(&hfdcan1);
   HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
@@ -418,9 +442,10 @@ static void MX_FDCAN1_Init(void)
 
     // ****************************************
 	// Reject all packets not match by a filter
+    // Both data and remote frames can be received
     // FILTERS WILL NOT REJECT PACKETS WITHOUT THIS LINE
     // ****************************************
-    HAL_FDCAN_ConfigGlobalFilter(&hfdcan1, FDCAN_REJECT, FDCAN_REJECT, FDCAN_REJECT, FDCAN_REJECT);
+    HAL_FDCAN_ConfigGlobalFilter(&hfdcan1, FDCAN_REJECT, FDCAN_REJECT, FDCAN_FILTER_REMOTE, FDCAN_REJECT_REMOTE);
   /* USER CODE END FDCAN1_Init 2 */
 
 }
