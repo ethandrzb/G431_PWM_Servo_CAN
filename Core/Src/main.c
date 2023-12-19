@@ -31,8 +31,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-//#define EXAMPLE_1
-#define EXAMPLE_2
+#define SEGMENT_BASE_CAN_ID 0x20
 
 #define PI 3.1415926535897932384626433
 
@@ -151,6 +150,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 			tmp <<= 8;
 			tmp += rxData[1];
 
+			// TODO: Use ID macro instead of hardcoded ID values
 			switch(rxHeader.Identifier)
 			{
 				case 0x10:
@@ -190,7 +190,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 			else if(rxHeader.RxFrameType == FDCAN_REMOTE_FRAME)
 			{
 				// Send heart beat response
-				txData[0] = 0x10;
+				txData[0] = SEGMENT_BASE_CAN_ID;
 				txHeader.DataLength = FDCAN_DLC_BYTES_1;
 				HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &txHeader, txData);
 
@@ -290,7 +290,7 @@ int main(void)
 //  HAL_TIM_Base_Start_IT(&htim6);
 
   // Initialize txHeader
-  txHeader.Identifier = 0x01; // CHANGE THIS ID BEFORE TRANSMITTING
+  txHeader.Identifier = SEGMENT_BASE_CAN_ID;
   txHeader.IdType = FDCAN_STANDARD_ID;
   txHeader.TxFrameType = FDCAN_DATA_FRAME;
   txHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
@@ -432,7 +432,7 @@ static void MX_FDCAN1_Init(void)
     sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
 //    sFilterConfig.FilterID1 = 0x11;
 //    sFilterConfig.FilterID2 = 0x11;
-    sFilterConfig.FilterID1 = 0x10;
+    sFilterConfig.FilterID1 = SEGMENT_BASE_CAN_ID;
 	sFilterConfig.FilterID2 = 0x7FC;
 
     if(HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK)
