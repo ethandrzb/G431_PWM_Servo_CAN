@@ -31,7 +31,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define SEGMENT_BASE_CAN_ID 0x20
+#define SEGMENT_BASE_CAN_ID 0x10
 
 #define PI 3.1415926535897932384626433
 
@@ -150,19 +150,19 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 			tmp <<= 8;
 			tmp += rxData[1];
 
-			// TODO: Use ID macro instead of hardcoded ID values
-			switch(rxHeader.Identifier)
+			// Extract servo number from LSB of identifier
+			switch(rxHeader.Identifier & 0x00F)
 			{
-				case 0x10:
+				case 0x0:
 					TIM1->CCR1 = degreesToPWM(tmp);
 					break;
-				case 0x11:
+				case 0x1:
 					TIM1->CCR2 = degreesToPWM(tmp);
 					break;
-				case 0x12:
+				case 0x2:
 					TIM1->CCR3 = degreesToPWM(tmp);
 					break;
-				case 0x13:
+				case 0x3:
 					TIM1->CCR4 = degreesToPWM(tmp);
 					break;
 			}
