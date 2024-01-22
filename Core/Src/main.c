@@ -73,6 +73,7 @@ static void MX_CORDIC_Init(void);
 static void MX_TIM6_Init(void);
 /* USER CODE BEGIN PFP */
 uint32_t degreesToPWM(int16_t degrees);
+uint16_t speedToWaveTimerPeriod(int8_t speed);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -180,13 +181,11 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 				}
 				else
 				{
-					// Right now, the usable range of speeds is roughly between 3 and 8, with lower numbers being faster
-					// I should change this to increase precision and make it more intuitive
-					// TODO: Map byte from 0-127 to 10000-3000
 					// TODO: Implement reverse (cast byte to signed integer or change the data type?)
 
 					// Update metachronal wave period
-					TIM6->ARR = rxData[0] * 1000;
+					TIM6->ARR = speedToWaveTimerPeriod((int8_t) rxData[0]);
+
 					HAL_TIM_Base_Start_IT(&htim6);
 				}
 
@@ -211,6 +210,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 		}
 	}
 }
+
 uint32_t degreesToPWM(int16_t degrees)
 {
 	// Validate range
@@ -223,6 +223,19 @@ uint32_t degreesToPWM(int16_t degrees)
 	// newValue = (-1 if flipped, 1 if not) * oldValue * (newRange / oldRange) + newRangeOffset
 
 	return degrees * (2000.0 / 270.0) + 500;
+}
+
+uint16_t speedToWaveTimerPeriod(int8_t speed)
+{
+	// TODO: Implement reverse
+	if(speed <= 0)
+	{
+		return 0;
+	}
+
+	// newValue = (-1 if flipped, 1 if not) * oldValue * (newRange / oldRange) + newRangeOffset
+
+	return -1 * ((int8_t) speed) * (7000.0 / 127.0) + 10000;
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
@@ -436,8 +449,6 @@ static void MX_FDCAN1_Init(void)
     sFilterConfig.FilterIndex = 0;
     sFilterConfig.FilterType = FDCAN_FILTER_MASK;
     sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
-//    sFilterConfig.FilterID1 = 0x11;
-//    sFilterConfig.FilterID2 = 0x11;
     sFilterConfig.FilterID1 = SEGMENT_BASE_CAN_ID;
 	sFilterConfig.FilterID2 = 0x7FC;
 
@@ -452,7 +463,6 @@ static void MX_FDCAN1_Init(void)
 	sFilterConfig.FilterType = FDCAN_FILTER_MASK;
 	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
 	sFilterConfig.FilterID1 = 0x0FF;
-	//	sFilterConfig.FilterID2 = 0x7FF;
 	sFilterConfig.FilterID2 = 0x7FC;
 
 	if(HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK)
