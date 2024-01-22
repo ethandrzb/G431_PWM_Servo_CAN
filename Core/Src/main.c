@@ -180,6 +180,11 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 				}
 				else
 				{
+					// Right now, the usable range of speeds is roughly between 3 and 8, with lower numbers being faster
+					// I should change this to increase precision and make it more intuitive
+					// TODO: Map byte from 0-127 to 10000-3000
+					// TODO: Implement reverse (cast byte to signed integer or change the data type?)
+
 					// Update metachronal wave period
 					TIM6->ARR = rxData[0] * 1000;
 					HAL_TIM_Base_Start_IT(&htim6);
@@ -416,7 +421,7 @@ static void MX_FDCAN1_Init(void)
   hfdcan1.Init.DataSyncJumpWidth = 4;
   hfdcan1.Init.DataTimeSeg1 = 14;
   hfdcan1.Init.DataTimeSeg2 = 5;
-  hfdcan1.Init.StdFiltersNbr = 1;
+  hfdcan1.Init.StdFiltersNbr = 2;
   hfdcan1.Init.ExtFiltersNbr = 0;
   hfdcan1.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
   if (HAL_FDCAN_Init(&hfdcan1) != HAL_OK)
@@ -426,6 +431,7 @@ static void MX_FDCAN1_Init(void)
   /* USER CODE BEGIN FDCAN1_Init 2 */
   FDCAN_FilterTypeDef sFilterConfig;
 
+  	// Filter out all messages not meant for this segment
     sFilterConfig.IdType = FDCAN_STANDARD_ID;
     sFilterConfig.FilterIndex = 0;
     sFilterConfig.FilterType = FDCAN_FILTER_MASK;
@@ -439,6 +445,20 @@ static void MX_FDCAN1_Init(void)
     {
   	  Error_Handler();
     }
+
+    // Accept messages from 0xFF (broadcast)
+	sFilterConfig.IdType = FDCAN_STANDARD_ID;
+	sFilterConfig.FilterIndex = 1;
+	sFilterConfig.FilterType = FDCAN_FILTER_MASK;
+	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+	sFilterConfig.FilterID1 = 0x0FF;
+	//	sFilterConfig.FilterID2 = 0x7FF;
+	sFilterConfig.FilterID2 = 0x7FC;
+
+	if(HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK)
+	{
+	  Error_Handler();
+	}
 
     // ****************************************
 	// Reject all packets not match by a filter
