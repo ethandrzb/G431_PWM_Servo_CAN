@@ -36,6 +36,9 @@
 #define PI 3.1415926535897932384626433
 
 #define q31_to_f32(x) ldexp((int32_t) x, -31)
+
+#define MAX(x,y) (x > y) ? x : y
+#define MIN(x,y) (x < y) ? x : y
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -255,10 +258,21 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 		cosResult = cordic_q31_cosf(radian);
 		sinResult = cordic_q31_sinf(radian);
 
-		TIM1->CCR1 = degreesToPWM(floor(sinResult * 90.0f) + 90.0f);
-		TIM1->CCR2 = degreesToPWM(floor(cosResult * 90.0f) + 90.0f);
-		TIM1->CCR3 = degreesToPWM(floor(sinResult * -90.0f) + 90.0f);
-		TIM1->CCR4 = degreesToPWM(floor(cosResult * -90.0f) + 90.0f);
+		// NOTE: Before this movement can be used on the robot, You need to reinstall the horn on servos 1 and 3 180 degrees offset from where it is right now
+		// Left horizontal servo
+		TIM1->CCR1 = degreesToPWM(floor(cosResult * 90.0f) + 180.0f);
+		// Left vertical servo
+		TIM1->CCR2 = degreesToPWM(MAX(floor(sinResult * -90.0f), 0));
+		// Right horizontal servo
+		TIM1->CCR3 = degreesToPWM(floor(cosResult * -90.0f) + 180.0f);
+		// Right vertical servo
+		TIM1->CCR4 = degreesToPWM(MAX(floor(sinResult * 90.0f), 0));
+
+//		// Quadrature mode
+//		TIM1->CCR1 = degreesToPWM(floor(sinResult * 90.0f) + 90.0f);
+//		TIM1->CCR2 = degreesToPWM(floor(cosResult * 90.0f) + 90.0f);
+//		TIM1->CCR3 = degreesToPWM(floor(sinResult * -90.0f) + 90.0f);
+//		TIM1->CCR4 = degreesToPWM(floor(cosResult * -90.0f) + 90.0f);
 	}
 }
 /* USER CODE END 0 */
