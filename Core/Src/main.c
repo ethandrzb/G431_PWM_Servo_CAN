@@ -258,6 +258,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 		cosResult = cordic_q31_cosf(radian);
 		sinResult = cordic_q31_sinf(radian);
 
+		// TODO: Add stride length parameter
+
 		// NOTE: Before this movement can be used on the robot, You need to reinstall the horn on servos 1 and 3 180 degrees offset from where it is right now
 		// Left horizontal servo
 		TIM1->CCR1 = degreesToPWM(floor(cosResult * 90.0f) + 180.0f);
@@ -325,6 +327,11 @@ int main(void)
   txHeader.Identifier = SEGMENT_BASE_CAN_ID;
   txHeader.IdType = FDCAN_STANDARD_ID;
   txHeader.TxFrameType = FDCAN_DATA_FRAME;
+  // ************************************************************************
+  // HEY YOU!! Changing this from FDCAN_ESI_ACTIVE to FDCAN_ESI_PASSIVE might be the solution to the interface freezing
+  // Research this bit field before changing it!
+  // HAL_FDCAN_EnableTxDelay might also be worth exploring
+  // ************************************************************************
   txHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
   txHeader.BitRateSwitch = FDCAN_BRS_OFF;
   txHeader.FDFormat = FDCAN_CLASSIC_CAN;
