@@ -216,8 +216,10 @@ uint32_t degreesToPWM(float degrees)
 	// Validate range
 	if(degrees < 0 || degrees > 270)
 	{
-		// Can use this as error value b/c pulse will never be this thin
-		return 0;
+    // Home motor if angle is out of range
+    degrees = 135;
+    // Can use this as error value b/c pulse will never be this thin
+		// return 0;
 	}
 
 	// newValue = (-1 if flipped, 1 if not) * oldValue * (newRange / oldRange) + newRangeOffset
