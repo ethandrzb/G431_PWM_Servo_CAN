@@ -36,9 +36,6 @@
 #define PI 3.1415926535897932384626433
 
 #define q31_to_f32(x) ldexp((int32_t) x, -31)
-
-#define MAX(x,y) (x > y) ? x : y
-#define MIN(x,y) (x < y) ? x : y
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -75,7 +72,7 @@ static void MX_TIM1_Init(void);
 static void MX_CORDIC_Init(void);
 static void MX_TIM6_Init(void);
 /* USER CODE BEGIN PFP */
-uint32_t degreesToPWM(int16_t degrees);
+uint32_t degreesToPWM(float degrees);
 uint16_t speedToWaveTimerPeriod(int8_t speed);
 /* USER CODE END PFP */
 
@@ -214,7 +211,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 	}
 }
 
-uint32_t degreesToPWM(int16_t degrees)
+uint32_t degreesToPWM(float degrees)
 {
 	// Validate range
 	if(degrees < 0 || degrees > 270)
@@ -225,7 +222,7 @@ uint32_t degreesToPWM(int16_t degrees)
 
 	// newValue = (-1 if flipped, 1 if not) * oldValue * (newRange / oldRange) + newRangeOffset
 
-	return degrees * (2000.0 / 270.0) + 500;
+	return ((float) degrees) * (2000.0f / 270.0f) + 500;
 }
 
 uint16_t speedToWaveTimerPeriod(int8_t speed)
@@ -261,14 +258,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 		// TODO: Add stride length parameter
 
 		// NOTE: Before this movement can be used on the robot, You need to reinstall the horn on servos 1 and 3 180 degrees offset from where it is right now
-		// Left horizontal servo
-		TIM1->CCR1 = degreesToPWM(floor(cosResult * 90.0f) + 180.0f);
-		// Left vertical servo
-		TIM1->CCR2 = degreesToPWM(MAX(floor(sinResult * -90.0f), 0));
 		// Right horizontal servo
-		TIM1->CCR3 = degreesToPWM(floor(cosResult * -90.0f) + 180.0f);
+		TIM1->CCR1 = degreesToPWM(floor(cosResult * 22.5f) + 135.0f);
 		// Right vertical servo
-		TIM1->CCR4 = degreesToPWM(MAX(floor(sinResult * 90.0f), 0));
+		TIM1->CCR2 = degreesToPWM(135.0f + floor(sinResult * 22.5f));
+		// Left horizontal servo
+		TIM1->CCR3 = degreesToPWM(floor(cosResult * 22.5f) + 135.0f);
+		// Left vertical servo
+		TIM1->CCR4 = degreesToPWM(135.0f + floor(sinResult * 22.5f));
 
 //		// Quadrature mode
 //		TIM1->CCR1 = degreesToPWM(floor(sinResult * 90.0f) + 90.0f);
