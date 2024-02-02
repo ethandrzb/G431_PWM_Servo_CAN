@@ -54,7 +54,8 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim6;
 
 /* USER CODE BEGIN PV */
-uint16_t phaseAngle = 0;
+// 15 degree phase difference between each segment
+uint16_t phaseAngle = 0 + 90 * ((SEGMENT_BASE_CAN_ID >> 4) - 1);
 
 FDCAN_RxHeaderTypeDef rxHeader;
 FDCAN_TxHeaderTypeDef txHeader;
@@ -259,7 +260,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 
 		// TODO: Add stride length parameter
 
-		// NOTE: Before this movement can be used on the robot, You need to reinstall the horn on servos 1 and 3 180 degrees offset from where it is right now
+		// TODO: Optimize these assignments to avoid repeated computation
 		// Right horizontal servo
 		TIM1->CCR1 = degreesToPWM(floor(cosResult * 22.5f) + 135.0f);
 		// Right vertical servo
