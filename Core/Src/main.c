@@ -33,6 +33,23 @@
 /* USER CODE BEGIN PD */
 #define SEGMENT_BASE_CAN_ID 0x10
 
+#define SERVO_OFFSET_ARRAY_LENGTH 4
+
+// TODO: Determine these values experimentally by homing each segment
+
+// Define offset array based on CAN ID
+#if SEGMENT_BASE_CAN_ID == 0x10
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {1, 6, 0, 0};
+#elif SEGMENT_BASE_CAN_ID == 0x20
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {30, 90, 0, 0};
+#elif SEGMENT_BASE_CAN_ID == 0x30
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {50, -50, 0, 0};
+#elif SEGMENT_BASE_CAN_ID == 0x40
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {115, -115, 0, 0};
+#elif SEGMENT_BASE_CAN_ID == 0x50
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {-90, 90, 0, 0};
+#endif
+
 #define PI 3.1415926535897932384626433
 
 #define q31_to_f32(x) ldexp((int32_t) x, -31)
@@ -55,7 +72,7 @@ TIM_HandleTypeDef htim6;
 
 /* USER CODE BEGIN PV */
 // 15 degree phase difference between each segment
-uint16_t phaseAngle = 0 + 90 * ((SEGMENT_BASE_CAN_ID >> 4) - 1);
+uint16_t phaseAngle = 0 + 15 * ((SEGMENT_BASE_CAN_ID >> 4) - 1);
 
 FDCAN_RxHeaderTypeDef rxHeader;
 FDCAN_TxHeaderTypeDef txHeader;
@@ -156,15 +173,19 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 			switch(rxHeader.Identifier & 0x00F)
 			{
 				case 0x0:
+					tmp += servo_home_offsets[0];
 					TIM1->CCR1 = degreesToPWM(tmp);
 					break;
 				case 0x1:
+					tmp += servo_home_offsets[1];
 					TIM1->CCR2 = degreesToPWM(tmp);
 					break;
 				case 0x2:
+					tmp += servo_home_offsets[2];
 					TIM1->CCR3 = degreesToPWM(tmp);
 					break;
 				case 0x3:
+					tmp += servo_home_offsets[3];
 					TIM1->CCR4 = degreesToPWM(tmp);
 					break;
 			}
@@ -182,8 +203,6 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 				}
 				else
 				{
-					// TODO: Implement reverse (cast byte to signed integer or change the data type?)
-
 					// Update metachronal wave period
 					TIM6->ARR = speedToWaveTimerPeriod((int8_t) rxData[0]);
 
@@ -215,29 +234,27 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 uint32_t degreesToPWM(float degrees)
 {
 	// Validate range
-	if(degrees < 0 || degrees > 270)
+	if(degrees < 0)
 	{
-    // Home motor if angle is out of range
-    degrees = 135;
-    // Can use this as error value b/c pulse will never be this thin
-		// return 0;
+		degrees = 0.0f;
+	}
+	else if(degrees > 270)
+	{
+		degrees = 270.0f;
 	}
 
 	// newValue = (-1 if flipped, 1 if not) * oldValue * (newRange / oldRange) + newRangeOffset
-
 	return ((float) degrees) * (2000.0f / 270.0f) + 500;
 }
 
 uint16_t speedToWaveTimerPeriod(int8_t speed)
 {
-	// TODO: Implement reverse
 	if(speed <= 0)
 	{
 		return 0;
 	}
 
 	// newValue = (-1 if flipped, 1 if not) * oldValue * (newRange / oldRange) + newRangeOffset
-
 	return -1 * ((int8_t) speed) * (7000.0 / 127.0) + 10000;
 }
 
@@ -262,13 +279,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 
 		// TODO: Optimize these assignments to avoid repeated computation
 		// Right horizontal servo
-		TIM1->CCR1 = degreesToPWM(floor(cosResult * 22.5f) + 135.0f);
+		TIM1->CCR1 = degreesToPWM(floor(cosResult * 22.5f) + 135.0f + servo_home_offsets[0]);
 		// Right vertical servo
-		TIM1->CCR2 = degreesToPWM(135.0f + floor(sinResult * 22.5f));
+		TIM1->CCR2 = degreesToPWM(floor(sinResult * 22.5f) + 135.0f + servo_home_offsets[1]);
 		// Left horizontal servo
-		TIM1->CCR3 = degreesToPWM(floor(cosResult * 22.5f) + 135.0f);
+		TIM1->CCR3 = degreesToPWM(floor(cosResult * 22.5f) + 135.0f + servo_home_offsets[2]);
 		// Left vertical servo
-		TIM1->CCR4 = degreesToPWM(135.0f + floor(sinResult * 22.5f));
+		TIM1->CCR4 = degreesToPWM(floor(sinResult * 22.5f) + 135.0f + servo_home_offsets[3]);
 
 //		// Quadrature mode
 //		TIM1->CCR1 = degreesToPWM(floor(sinResult * 90.0f) + 90.0f);
