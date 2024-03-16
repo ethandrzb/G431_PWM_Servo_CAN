@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <math.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -78,6 +79,7 @@ TIM_HandleTypeDef htim7;
 uint16_t phaseAngle = 0 + 15 * ((SEGMENT_BASE_CAN_ID >> 4) - 1);
 
 uint16_t targetServoPWMAngle[4];
+bool saveWavePositions = false;
 
 FDCAN_RxHeaderTypeDef rxHeader;
 FDCAN_TxHeaderTypeDef txHeader;
@@ -169,11 +171,16 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 			HAL_TIM_Base_Stop_IT(&htim6);
 
 #ifdef ENABLE_LINEAR_SLEW
-			// Change all target servo PWM angles to current values of TIM1->CCRx to maintain their positions
-			targetServoPWMAngle[0] = TIM1->CCR1;
-			targetServoPWMAngle[1] = TIM1->CCR2;
-			targetServoPWMAngle[2] = TIM1->CCR3;
-			targetServoPWMAngle[3] = TIM1->CCR4;
+			// Only save positions if the last command used the metachronal wave
+			if(saveWavePositions)
+			{
+				saveWavePositions = false;
+				// Use current positions in metachronal wave as targets to maintain position
+				targetServoPWMAngle[0] = TIM1->CCR1;
+				targetServoPWMAngle[1] = TIM1->CCR2;
+				targetServoPWMAngle[2] = TIM1->CCR3;
+				targetServoPWMAngle[3] = TIM1->CCR4;
+			}
 #endif
 
 			// Get angle from message
@@ -184,44 +191,32 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 			tmp += rxData[1];
 
 			// Extract servo number from LSB of identifier
-			switch(rxHeader.Identifier & 0x00F)
+			uint8_t servoNumber = rxHeader.Identifier & 0x00F;
+#ifdef ENABLE_LINEAR_SLEW
+			tmp += servo_home_offsets[servoNumber];
+			targetServoPWMAngle[servoNumber] = degreesToPWM(tmp);
+			// Start linear slew timer
+			HAL_TIM_Base_Start_IT(&htim7);
+#else
+			switch(servoNumber)
 			{
 				case 0x0:
 					tmp += servo_home_offsets[0];
-#ifdef ENABLE_LINEAR_SLEW
-					targetServoPWMAngle[0] = degreesToPWM(tmp);
-#else
 					TIM1->CCR1 = degreesToPWM(tmp);
-#endif
 					break;
 				case 0x1:
 					tmp += servo_home_offsets[1];
-#ifdef ENABLE_LINEAR_SLEW
-					targetServoPWMAngle[1] = degreesToPWM(tmp);
-#else
 					TIM1->CCR2 = degreesToPWM(tmp);
-#endif
 					break;
 				case 0x2:
 					tmp += servo_home_offsets[2];
-#ifdef ENABLE_LINEAR_SLEW
-					targetServoPWMAngle[2] = degreesToPWM(tmp);
-#else
 					TIM1->CCR3 = degreesToPWM(tmp);
-#endif
 					break;
 				case 0x3:
 					tmp += servo_home_offsets[3];
-#ifdef ENABLE_LINEAR_SLEW
-					targetServoPWMAngle[3] = degreesToPWM(tmp);
-#else
 					TIM1->CCR4 = degreesToPWM(tmp);
-#endif
 					break;
 			}
-#ifdef ENABLE_LINEAR_SLEW
-			// Start linear slew timer
-			HAL_TIM_Base_Start_IT(&htim7);
 #endif
 
 			HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
@@ -240,6 +235,8 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 #ifdef ENABLE_LINEAR_SLEW
 					// Stop linear slew timer
 					HAL_TIM_Base_Stop_IT(&htim7);
+
+					saveWavePositions = true;
 
 					//TODO: If one or more individual servos have been moved, move all servos
 						// to last position in wave before resuming using linear slew to reduce current spikes
