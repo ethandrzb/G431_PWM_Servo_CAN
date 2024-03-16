@@ -69,10 +69,13 @@ UART_HandleTypeDef hlpuart1;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim6;
+TIM_HandleTypeDef htim7;
 
 /* USER CODE BEGIN PV */
 // 15 degree phase difference between each segment
 uint16_t phaseAngle = 0 + 15 * ((SEGMENT_BASE_CAN_ID >> 4) - 1);
+
+uint16_t targetServoPWMAngle[4];
 
 FDCAN_RxHeaderTypeDef rxHeader;
 FDCAN_TxHeaderTypeDef txHeader;
@@ -89,6 +92,7 @@ static void MX_FDCAN1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_CORDIC_Init(void);
 static void MX_TIM6_Init(void);
+static void MX_TIM7_Init(void);
 /* USER CODE BEGIN PFP */
 uint32_t degreesToPWM(float degrees);
 uint16_t speedToWaveTimerPeriod(int8_t speed);
@@ -162,6 +166,12 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 			// Stop metachronal timer if necessary
 			HAL_TIM_Base_Stop_IT(&htim6);
 
+			// Change all target servo PWM angles to current values of TIM1->CCRx to maintain their positions
+			targetServoPWMAngle[0] = TIM1->CCR1;
+			targetServoPWMAngle[1] = TIM1->CCR2;
+			targetServoPWMAngle[2] = TIM1->CCR3;
+			targetServoPWMAngle[3] = TIM1->CCR4;
+
 			// Get angle from message
 			uint16_t tmp = 0;
 
@@ -174,21 +184,28 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 			{
 				case 0x0:
 					tmp += servo_home_offsets[0];
-					TIM1->CCR1 = degreesToPWM(tmp);
+					targetServoPWMAngle[0] = degreesToPWM(tmp);
+//					TIM1->CCR1 = degreesToPWM(tmp);
 					break;
 				case 0x1:
 					tmp += servo_home_offsets[1];
-					TIM1->CCR2 = degreesToPWM(tmp);
+//					TIM1->CCR2 = degreesToPWM(tmp);
+					targetServoPWMAngle[1] = degreesToPWM(tmp);
 					break;
 				case 0x2:
 					tmp += servo_home_offsets[2];
-					TIM1->CCR3 = degreesToPWM(tmp);
+//					TIM1->CCR3 = degreesToPWM(tmp);
+					targetServoPWMAngle[2] = degreesToPWM(tmp);
 					break;
 				case 0x3:
 					tmp += servo_home_offsets[3];
-					TIM1->CCR4 = degreesToPWM(tmp);
+//					TIM1->CCR4 = degreesToPWM(tmp);
+					targetServoPWMAngle[3] = degreesToPWM(tmp);
 					break;
 			}
+
+			// Start linear slew timer
+			HAL_TIM_Base_Start_IT(&htim7);
 
 			HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 		}
@@ -203,6 +220,15 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 				}
 				else
 				{
+					// Stop linear slew timer
+					HAL_TIM_Base_Stop_IT(&htim7);
+
+					//TODO: If one or more individual servos have been moved, move all servos
+						// to last position in wave before resuming using linear slew to reduce current spikes
+						// This would fix an edge case where a current spike could be caused by many servos suddenly
+						// jumping to their position in the metachronal wave when it is resumed.
+						// Should only matter if a significant number of servos are moved from their position in the wave.
+
 					// Update metachronal wave period
 					TIM6->ARR = speedToWaveTimerPeriod((int8_t) rxData[0]);
 
@@ -293,6 +319,45 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 //		TIM1->CCR3 = degreesToPWM(floor(sinResult * -90.0f) + 90.0f);
 //		TIM1->CCR4 = degreesToPWM(floor(cosResult * -90.0f) + 90.0f);
 	}
+	else if(htim == &htim7)
+	{
+		// Nudge the TIM1->CCRx registers towards their target values
+		if(TIM1->CCR1 < targetServoPWMAngle[0])
+		{
+			TIM1->CCR1++;
+		}
+		else if(TIM1->CCR1 > targetServoPWMAngle[0])
+		{
+			TIM1->CCR1--;
+		}
+
+		if(TIM1->CCR2 < targetServoPWMAngle[1])
+		{
+			TIM1->CCR2++;
+		}
+		else if(TIM1->CCR2 > targetServoPWMAngle[1])
+		{
+			TIM1->CCR2--;
+		}
+
+		if(TIM1->CCR3 < targetServoPWMAngle[2])
+		{
+			TIM1->CCR3++;
+		}
+		else if(TIM1->CCR3 > targetServoPWMAngle[2])
+		{
+			TIM1->CCR3--;
+		}
+
+		if(TIM1->CCR4 < targetServoPWMAngle[3])
+		{
+			TIM1->CCR4++;
+		}
+		else if(TIM1->CCR4 > targetServoPWMAngle[3])
+		{
+			TIM1->CCR4--;
+		}
+	}
 }
 /* USER CODE END 0 */
 
@@ -329,13 +394,21 @@ int main(void)
   MX_TIM1_Init();
   MX_CORDIC_Init();
   MX_TIM6_Init();
+  MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
 
   // Initialize PWM to 0
+  // This should be zero because the servo will interpret this as no signal
+  	  // and stay where it is until it is changed to a valid (non-zero) value
   TIM1->CCR1 = 0;
   TIM1->CCR2 = 0;
   TIM1->CCR3 = 0;
   TIM1->CCR4 = 0;
+  // Same with the target values
+  targetServoPWMAngle[0] = 0;
+  targetServoPWMAngle[1] = 0;
+  targetServoPWMAngle[2] = 0;
+  targetServoPWMAngle[3] = 0;
 
   // Start servo PWM
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
@@ -700,6 +773,44 @@ static void MX_TIM6_Init(void)
   /* USER CODE BEGIN TIM6_Init 2 */
 
   /* USER CODE END TIM6_Init 2 */
+
+}
+
+/**
+  * @brief TIM7 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM7_Init(void)
+{
+
+  /* USER CODE BEGIN TIM7_Init 0 */
+
+  /* USER CODE END TIM7_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM7_Init 1 */
+
+  /* USER CODE END TIM7_Init 1 */
+  htim7.Instance = TIM7;
+  htim7.Init.Prescaler = 170-1;
+  htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim7.Init.Period = 1499;
+  htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim7, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM7_Init 2 */
+
+  /* USER CODE END TIM7_Init 2 */
 
 }
 
