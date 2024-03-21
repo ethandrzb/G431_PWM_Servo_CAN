@@ -21,8 +21,10 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "dht11.h"
 #include <math.h>
 #include <stdbool.h>
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -71,6 +73,7 @@ FDCAN_HandleTypeDef hfdcan1;
 UART_HandleTypeDef hlpuart1;
 
 TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim7;
 
@@ -86,6 +89,9 @@ FDCAN_TxHeaderTypeDef txHeader;
 uint8_t rxData[8];
 uint8_t txData[8];
 
+uint8_t UARTTxBuffer[30];
+
+const peripheralType connectedPeripheral = PERIPHERAL_TEMP_HUMIDITY_DHT11;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -97,6 +103,7 @@ static void MX_TIM1_Init(void);
 static void MX_CORDIC_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_TIM7_Init(void);
+static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
 uint32_t degreesToPWM(float degrees);
 uint16_t speedToWaveTimerPeriod(int8_t speed);
@@ -263,6 +270,33 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 				HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 			}
 		}
+		// Sensor data request
+		else if(rxHeader.DataLength == FDCAN_DLC_BYTES_8 && rxHeader.RxFrameType == FDCAN_REMOTE_FRAME)
+		{
+			// Specify connected peripheral in first byte
+			txData[0] = connectedPeripheral;
+
+			// Send response based on connected peripheral
+			switch(connectedPeripheral)
+			{
+				case PERIPHERAL_NONE:
+					break;
+				case PERIPHERAL_TEMP_HUMIDITY_DHT11:
+					dht11DataBytes result = DHT11_GetDataBytes();
+					txData[1] = result.humidityIntegerByte;
+					txData[2] = result.humidityDecimalByte;
+					txData[3] = result.temperatureIntegerByte;
+					txData[4] = result.temperatureDecimalByte;
+					txData[5] = result.checksum;
+					break;
+				//TODO: Add support for more peripherals
+			}
+
+			txHeader.DataLength = FDCAN_DLC_BYTES_8;
+			HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &txHeader, txData);
+
+			HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+		}
 
 		// Re-activate message notifications
 		// HAL disables them when a message is received, so they need to be reactivated after every message
@@ -414,6 +448,7 @@ int main(void)
   MX_CORDIC_Init();
   MX_TIM6_Init();
   MX_TIM7_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
 
   // Initialize PWM to 0
@@ -439,6 +474,8 @@ int main(void)
 //  HAL_TIM_Base_Start_IT(&htim6);
 
   // Initialize txHeader
+  // NOTE: TxFrameType is NOT reset to FDCAN_DATA_FRAME. You will need to set the frame type
+  	  	  // before every send if you change it anywhere other than the initialization below
   txHeader.Identifier = SEGMENT_BASE_CAN_ID;
   txHeader.IdType = FDCAN_STANDARD_ID;
   txHeader.TxFrameType = FDCAN_DATA_FRAME;
@@ -453,6 +490,9 @@ int main(void)
   txHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
   txHeader.MessageMarker = 0;
 
+  // Init delay timer for DHT11
+  HAL_TIM_Base_Start(&htim4);
+
   HAL_FDCAN_Start(&hfdcan1);
   HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
   /* USER CODE END 2 */
@@ -461,6 +501,20 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+//	  dht11Data result = DHT11_GetData();
+//
+//	 if(result.isValid)
+//	 {
+//		 sprintf(UARTTxBuffer, "%.1f degrees C %.1f%% humidity\n", result.temperature, result.humidity);
+//	 }
+//	 else
+//	 {
+//		 sprintf(UARTTxBuffer, "Invalid result\n");
+//	 }
+//  //	sprintf(UARTTxBuffer, (char *) "%.1f %.1f %d %d\n", temperature, humidity, checksum, rhByte1 + rhByte2 + temperatureByte1 + temperatureByte2);
+//	HAL_UART_Transmit(&hlpuart1, UARTTxBuffer, 30, 100);
+//
+//	HAL_Delay(250);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -754,6 +808,51 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 2 */
   HAL_TIM_MspPostInit(&htim1);
+
+}
+
+/**
+  * @brief TIM4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM4_Init(void)
+{
+
+  /* USER CODE BEGIN TIM4_Init 0 */
+
+  /* USER CODE END TIM4_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM4_Init 1 */
+
+  /* USER CODE END TIM4_Init 1 */
+  htim4.Instance = TIM4;
+  htim4.Init.Prescaler = 170-1;
+  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim4.Init.Period = 65535;
+  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM4_Init 2 */
+
+  /* USER CODE END TIM4_Init 2 */
 
 }
 

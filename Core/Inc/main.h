@@ -36,7 +36,12 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-
+// NOTE: This should be identical to the enum used by the body segments
+typedef enum peripheralType
+{
+	PERIPHERAL_NONE = 0,
+	PERIPHERAL_TEMP_HUMIDITY_DHT11 = 1
+} peripheralType;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
