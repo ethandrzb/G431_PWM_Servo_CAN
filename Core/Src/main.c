@@ -93,7 +93,7 @@ uint8_t UARTTxBuffer[30];
 
 const peripheralType connectedPeripheral = PERIPHERAL_TEMP_HUMIDITY_DHT11;
 
-bool receivedRequestForPeripheralData = false;
+volatile bool receivedRequestForPeripheralData = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -488,7 +488,7 @@ int main(void)
   HAL_FDCAN_Start(&hfdcan1);
   HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
 
-  receivedRequestForPeripheralData = true;
+//  receivedRequestForPeripheralData = true;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -510,12 +510,19 @@ int main(void)
 //		//	sprintf(UARTTxBuffer, (char *) "%.1f %.1f %d %d\n", temperature, humidity, checksum, rhByte1 + rhByte2 + temperatureByte1 + temperatureByte2);
 //		HAL_UART_Transmit(&hlpuart1, UARTTxBuffer, 30, 100);
 
-		dht11DataBytes result = DHT11_GetDataBytes();
-		txData[1] = result.humidityIntegerByte;
-		txData[2] = result.humidityDecimalByte;
-		txData[3] = result.temperatureIntegerByte;
-		txData[4] = result.temperatureDecimalByte;
-		txData[5] = result.checksum;
+//		dht11DataBytes result = DHT11_GetDataBytes();
+//		txData[1] = result.humidityIntegerByte;
+//		txData[2] = result.humidityDecimalByte;
+//		txData[3] = result.temperatureIntegerByte;
+//		txData[4] = result.temperatureDecimalByte;
+//		txData[5] = result.checksum;
+
+		// Sample data
+		txData[1] = 12;
+		txData[2] = 3;
+		txData[3] = 45;
+		txData[4] = 6;
+		txData[5] = 66;
 
 		receivedRequestForPeripheralData = false;
 
