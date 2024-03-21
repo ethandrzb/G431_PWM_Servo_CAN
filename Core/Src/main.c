@@ -92,6 +92,8 @@ uint8_t txData[8];
 uint8_t UARTTxBuffer[30];
 
 const peripheralType connectedPeripheral = PERIPHERAL_TEMP_HUMIDITY_DHT11;
+
+bool receivedRequestForPeripheralData = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -282,20 +284,10 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 				case PERIPHERAL_NONE:
 					break;
 				case PERIPHERAL_TEMP_HUMIDITY_DHT11:
-					dht11DataBytes result = DHT11_GetDataBytes();
-					txData[1] = result.humidityIntegerByte;
-					txData[2] = result.humidityDecimalByte;
-					txData[3] = result.temperatureIntegerByte;
-					txData[4] = result.temperatureDecimalByte;
-					txData[5] = result.checksum;
+					receivedRequestForPeripheralData = true;
 					break;
 				//TODO: Add support for more peripherals
 			}
-
-			txHeader.DataLength = FDCAN_DLC_BYTES_8;
-			HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &txHeader, txData);
-
-			HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 		}
 
 		// Re-activate message notifications
@@ -495,26 +487,45 @@ int main(void)
 
   HAL_FDCAN_Start(&hfdcan1);
   HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+
+  receivedRequestForPeripheralData = true;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-//	  dht11Data result = DHT11_GetData();
+	  if(receivedRequestForPeripheralData)
+	  {
+//		dht11Data result = DHT11_GetData();
 //
-//	 if(result.isValid)
-//	 {
-//		 sprintf(UARTTxBuffer, "%.1f degrees C %.1f%% humidity\n", result.temperature, result.humidity);
-//	 }
-//	 else
-//	 {
-//		 sprintf(UARTTxBuffer, "Invalid result\n");
-//	 }
-//  //	sprintf(UARTTxBuffer, (char *) "%.1f %.1f %d %d\n", temperature, humidity, checksum, rhByte1 + rhByte2 + temperatureByte1 + temperatureByte2);
-//	HAL_UART_Transmit(&hlpuart1, UARTTxBuffer, 30, 100);
-//
-//	HAL_Delay(250);
+//		if(result.isValid)
+//		{
+//			sprintf(UARTTxBuffer, "%.1f degrees C %.1f%% humidity\n", result.temperature, result.humidity);
+//		}
+//		else
+//		{
+//			sprintf(UARTTxBuffer, "Invalid result\n");
+//		}
+//		//	sprintf(UARTTxBuffer, (char *) "%.1f %.1f %d %d\n", temperature, humidity, checksum, rhByte1 + rhByte2 + temperatureByte1 + temperatureByte2);
+//		HAL_UART_Transmit(&hlpuart1, UARTTxBuffer, 30, 100);
+
+		dht11DataBytes result = DHT11_GetDataBytes();
+		txData[1] = result.humidityIntegerByte;
+		txData[2] = result.humidityDecimalByte;
+		txData[3] = result.temperatureIntegerByte;
+		txData[4] = result.temperatureDecimalByte;
+		txData[5] = result.checksum;
+
+		receivedRequestForPeripheralData = false;
+
+		txHeader.DataLength = FDCAN_DLC_BYTES_8;
+		HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &txHeader, txData);
+
+		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+
+//		HAL_Delay(250);
+	  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
