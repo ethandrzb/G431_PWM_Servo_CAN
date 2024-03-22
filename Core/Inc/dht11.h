@@ -6,6 +6,8 @@
 // Can be any continuous microsecond timer
 #define DELAY_TIMER TIM4
 
+volatile bool readCancelled = false;
+
 typedef struct dht11Data
 {
 	float temperature;
@@ -48,6 +50,9 @@ void setPinInput(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin)
 }
 void DHT11_Start(void)
 {
+	// Reset cancel flag
+	readCancelled = false;
+
 	setPinOutput(DHT11_SERIAL_GPIO_Port, DHT11_SERIAL_Pin);
 	HAL_GPIO_WritePin(DHT11_SERIAL_GPIO_Port, DHT11_SERIAL_Pin, GPIO_PIN_RESET);
 	delayMicroseconds(18000);
@@ -77,7 +82,7 @@ uint8_t DHT11_ReadResponse(void)
 	}
 
 	// Wait for pin to go low
-	while((HAL_GPIO_ReadPin(DHT11_SERIAL_GPIO_Port, DHT11_SERIAL_Pin)));
+	while((HAL_GPIO_ReadPin(DHT11_SERIAL_GPIO_Port, DHT11_SERIAL_Pin)) && !readCancelled);
 
 	return response;
 }
@@ -89,7 +94,7 @@ uint8_t DHT11_ReadByte(void)
 	for(uint8_t j = 0; j < 8; j++)
 	{
 		// Wait for pin to go high
-		while(!(HAL_GPIO_ReadPin(DHT11_SERIAL_GPIO_Port, DHT11_SERIAL_Pin)));
+		while(!(HAL_GPIO_ReadPin(DHT11_SERIAL_GPIO_Port, DHT11_SERIAL_Pin)) && !readCancelled);
 		delayMicroseconds(40);
 
 		if(!HAL_GPIO_ReadPin(DHT11_SERIAL_GPIO_Port, DHT11_SERIAL_Pin))
@@ -104,7 +109,7 @@ uint8_t DHT11_ReadByte(void)
 		}
 
 		// Wait for pin to go low
-		while((HAL_GPIO_ReadPin(DHT11_SERIAL_GPIO_Port, DHT11_SERIAL_Pin)));
+		while((HAL_GPIO_ReadPin(DHT11_SERIAL_GPIO_Port, DHT11_SERIAL_Pin)) && !readCancelled);
 	}
 
 	return byte;
@@ -140,6 +145,11 @@ dht11Data DHT11_GetData()
 	}
 
 	return result;
+}
+
+void DHT11_CancelOperation()
+{
+	readCancelled = true;
 }
 
 void delayMicroseconds(uint16_t usec)

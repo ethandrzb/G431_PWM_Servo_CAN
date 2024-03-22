@@ -93,7 +93,7 @@ uint8_t UARTTxBuffer[30];
 
 const peripheralType connectedPeripheral = PERIPHERAL_TEMP_HUMIDITY_DHT11;
 
-volatile bool receivedRequestForPeripheralData = false;
+volatile bool receivedRequestForPeripheralData = true;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -284,6 +284,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 				case PERIPHERAL_NONE:
 					break;
 				case PERIPHERAL_TEMP_HUMIDITY_DHT11:
+					DHT11_CancelOperation();
 					receivedRequestForPeripheralData = true;
 					break;
 				//TODO: Add support for more peripherals
@@ -488,7 +489,6 @@ int main(void)
   HAL_FDCAN_Start(&hfdcan1);
   HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
 
-//  receivedRequestForPeripheralData = true;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -510,19 +510,21 @@ int main(void)
 //		//	sprintf(UARTTxBuffer, (char *) "%.1f %.1f %d %d\n", temperature, humidity, checksum, rhByte1 + rhByte2 + temperatureByte1 + temperatureByte2);
 //		HAL_UART_Transmit(&hlpuart1, UARTTxBuffer, 30, 100);
 
-//		dht11DataBytes result = DHT11_GetDataBytes();
-//		txData[1] = result.humidityIntegerByte;
-//		txData[2] = result.humidityDecimalByte;
-//		txData[3] = result.temperatureIntegerByte;
-//		txData[4] = result.temperatureDecimalByte;
-//		txData[5] = result.checksum;
+		// Problem: Function gets stuck trying to read the response from the sensor
+		// Solution: Add a timeout or way to cancel the current operation
+		dht11DataBytes result = DHT11_GetDataBytes();
+		txData[1] = result.humidityIntegerByte;
+		txData[2] = result.humidityDecimalByte;
+		txData[3] = result.temperatureIntegerByte;
+		txData[4] = result.temperatureDecimalByte;
+		txData[5] = result.checksum;
 
 		// Sample data
-		txData[1] = 12;
-		txData[2] = 3;
-		txData[3] = 45;
-		txData[4] = 6;
-		txData[5] = 66;
+//		txData[1] = 12;
+//		txData[2] = 3;
+//		txData[3] = 45;
+//		txData[4] = 6;
+//		txData[5] = 66;
 
 		receivedRequestForPeripheralData = false;
 
