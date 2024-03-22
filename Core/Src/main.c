@@ -497,43 +497,32 @@ int main(void)
   {
 	  if(receivedRequestForPeripheralData)
 	  {
-//		dht11Data result = DHT11_GetData();
-//
-//		if(result.isValid)
-//		{
-//			sprintf(UARTTxBuffer, "%.1f degrees C %.1f%% humidity\n", result.temperature, result.humidity);
-//		}
-//		else
-//		{
-//			sprintf(UARTTxBuffer, "Invalid result\n");
-//		}
-//		//	sprintf(UARTTxBuffer, (char *) "%.1f %.1f %d %d\n", temperature, humidity, checksum, rhByte1 + rhByte2 + temperatureByte1 + temperatureByte2);
-//		HAL_UART_Transmit(&hlpuart1, UARTTxBuffer, 30, 100);
-
-		// Problem: Function gets stuck trying to read the response from the sensor
-		// Solution: Add a timeout or way to cancel the current operation
+		HAL_NVIC_DisableIRQ(TIM6_DAC_IRQn);
+		HAL_NVIC_DisableIRQ(TIM7_IRQn);
+		// ****************************************
+		// CRITICAL TASK -- MUST NOT BE INTERRUPTED
 		dht11DataBytes result = DHT11_GetDataBytes();
+		// ****************************************
+		HAL_NVIC_EnableIRQ(TIM6_DAC_IRQn);
+		HAL_NVIC_EnableIRQ(TIM7_IRQn);
 		txData[1] = result.humidityIntegerByte;
 		txData[2] = result.humidityDecimalByte;
 		txData[3] = result.temperatureIntegerByte;
 		txData[4] = result.temperatureDecimalByte;
 		txData[5] = result.checksum;
 
-		// Sample data
-//		txData[1] = 12;
-//		txData[2] = 3;
-//		txData[3] = 45;
-//		txData[4] = 6;
-//		txData[5] = 66;
+		// Stop trying if checksum passes
+		if(txData[5] == txData[1] + txData[2] + txData[3] + txData[4])
+		{
+			receivedRequestForPeripheralData = false;
 
-		receivedRequestForPeripheralData = false;
-
-		txHeader.DataLength = FDCAN_DLC_BYTES_8;
-		HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &txHeader, txData);
+			txHeader.DataLength = FDCAN_DLC_BYTES_8;
+			HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &txHeader, txData);
+		}
 
 		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 
-//		HAL_Delay(250);
+		HAL_Delay(500);
 	  }
     /* USER CODE END WHILE */
 
