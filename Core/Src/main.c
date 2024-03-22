@@ -38,21 +38,21 @@
 
 #define SERVO_OFFSET_ARRAY_LENGTH 4
 
-#define ENABLE_LINEAR_SLEW
+//#define ENABLE_LINEAR_SLEW
 
 // TODO: Determine these values experimentally by homing each segment
 
 // Define offset array based on CAN ID
 #if SEGMENT_BASE_CAN_ID == 0x10
-int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {1, 6, 0, 0};
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, 0, 15, 20};
 #elif SEGMENT_BASE_CAN_ID == 0x20
-int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {30, 90, 0, 0};
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {5, -10, 0, 0};
 #elif SEGMENT_BASE_CAN_ID == 0x30
-int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {50, -50, 0, 0};
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {45, 5, 5, 0};
 #elif SEGMENT_BASE_CAN_ID == 0x40
-int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {115, -115, 0, 0};
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, -15, 43, -5};
 #elif SEGMENT_BASE_CAN_ID == 0x50
-int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {-90, 90, 0, 0};
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {-45, -10, 45, -45};
 #endif
 
 #define PI 3.1415926535897932384626433
@@ -79,7 +79,7 @@ TIM_HandleTypeDef htim7;
 
 /* USER CODE BEGIN PV */
 // 15 degree phase difference between each segment
-uint16_t phaseAngle = 0 + 15 * ((SEGMENT_BASE_CAN_ID >> 4) - 1);
+uint16_t phaseAngle = 0 + 45 * ((SEGMENT_BASE_CAN_ID >> 4) - 1);
 
 uint16_t targetServoPWMAngle[4];
 bool saveWavePositions = false;
@@ -91,9 +91,9 @@ uint8_t txData[8];
 
 uint8_t UARTTxBuffer[30];
 
-const peripheralType connectedPeripheral = PERIPHERAL_TEMP_HUMIDITY_DHT11;
+const peripheralType connectedPeripheral = PERIPHERAL_NONE;
 
-volatile bool receivedRequestForPeripheralData = true;
+volatile bool receivedRequestForPeripheralData = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -348,13 +348,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 
 		// TODO: Optimize these assignments to avoid repeated computation
 		// Right horizontal servo
-		TIM1->CCR1 = degreesToPWM(floor(cosResult * 22.5f) + 135.0f + servo_home_offsets[0]);
+		TIM1->CCR1 = degreesToPWM(floor(cosResult * 20.0f) + 135.0f + servo_home_offsets[0]);
 		// Right vertical servo
-		TIM1->CCR2 = degreesToPWM(floor(sinResult * 22.5f) + 135.0f + servo_home_offsets[1]);
+		TIM1->CCR2 = degreesToPWM(floor(sinResult * 20.0f) + 135.0f + servo_home_offsets[1]);
 		// Left horizontal servo
-		TIM1->CCR3 = degreesToPWM(floor(cosResult * 22.5f) + 135.0f + servo_home_offsets[2]);
+		TIM1->CCR3 = degreesToPWM(floor(cosResult * 20.0f) + 135.0f + servo_home_offsets[2]);
 		// Left vertical servo
-		TIM1->CCR4 = degreesToPWM(floor(sinResult * 22.5f) + 135.0f + servo_home_offsets[3]);
+		TIM1->CCR4 = degreesToPWM(floor(sinResult * 20.0f) + 135.0f + servo_home_offsets[3]);
 
 //		// Quadrature mode
 //		TIM1->CCR1 = degreesToPWM(floor(sinResult * 90.0f) + 90.0f);
@@ -495,8 +495,13 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  // Add conditions for additional
 	  if(receivedRequestForPeripheralData)
 	  {
+		// FDCAN interrupts could be disabled here too,
+		// but that risks creating a situation where the MCU
+		// is stuck trying to read data from the sensor and is unable
+		// to be "unstuck" by triggering another interrupt.
 		HAL_NVIC_DisableIRQ(TIM6_DAC_IRQn);
 		HAL_NVIC_DisableIRQ(TIM7_IRQn);
 		// ****************************************
@@ -505,6 +510,7 @@ int main(void)
 		// ****************************************
 		HAL_NVIC_EnableIRQ(TIM6_DAC_IRQn);
 		HAL_NVIC_EnableIRQ(TIM7_IRQn);
+
 		txData[1] = result.humidityIntegerByte;
 		txData[2] = result.humidityDecimalByte;
 		txData[3] = result.temperatureIntegerByte;
