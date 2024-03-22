@@ -27,9 +27,11 @@ typedef struct dht11DataBytes
 void setPinOutput(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin);
 void setPinInput(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin);
 void DHT11_Start(void);
+bool DHT11_ReadResponse(void);
 uint8_t DHT11_ReadByte(void);
 dht11Data DHT11_GetData();
 dht11DataBytes DHT11_GetDataBytes();
+void DHT11_CancelOperation();
 void delayMicroseconds(uint16_t usec);
 
 void setPinOutput(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin)
@@ -62,9 +64,10 @@ void DHT11_Start(void)
 }
 
 // Detects acknowledgment signal from DHT11 sensor
-uint8_t DHT11_ReadResponse(void)
+bool DHT11_ReadResponse(void)
 {
-	uint8_t response = 0;
+	// Sensor not present
+	bool sensorPresent = false;
 	delayMicroseconds(40);
 	if(!HAL_GPIO_ReadPin(DHT11_SERIAL_GPIO_Port, DHT11_SERIAL_Pin))
 	{
@@ -72,19 +75,14 @@ uint8_t DHT11_ReadResponse(void)
 		if(HAL_GPIO_ReadPin(DHT11_SERIAL_GPIO_Port, DHT11_SERIAL_Pin))
 		{
 			// Sensor present
-			response = 1;
-		}
-		else
-		{
-			// Sensor not present
-			response = -1;
+			sensorPresent = true;
 		}
 	}
 
 	// Wait for pin to go low
 	while((HAL_GPIO_ReadPin(DHT11_SERIAL_GPIO_Port, DHT11_SERIAL_Pin)) && !readCancelled);
 
-	return response;
+	return sensorPresent;
 }
 
 uint8_t DHT11_ReadByte(void)
