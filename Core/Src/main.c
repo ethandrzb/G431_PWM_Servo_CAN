@@ -38,7 +38,7 @@
 
 #define SERVO_OFFSET_ARRAY_LENGTH 4
 
-//#define ENABLE_LINEAR_SLEW
+#define ENABLE_LINEAR_SLEW
 
 // TODO: Determine these values experimentally by homing each segment
 
@@ -78,8 +78,8 @@ TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim7;
 
 /* USER CODE BEGIN PV */
-// 15 degree phase difference between each segment
-uint16_t phaseAngle = 0 + 45 * ((SEGMENT_BASE_CAN_ID >> 4) - 1);
+// 60 degree phase difference between each segment
+uint16_t phaseAngle = 0 + 60 * ((SEGMENT_BASE_CAN_ID >> 4) - 1);
 
 uint16_t targetServoPWMAngle[4];
 bool saveWavePositions = false;
@@ -201,8 +201,11 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 
 			// Extract servo number from LSB of identifier
 			uint8_t servoNumber = rxHeader.Identifier & 0x00F;
-#ifdef ENABLE_LINEAR_SLEW
+
+			// Add homing offset
 			tmp += servo_home_offsets[servoNumber];
+
+#ifdef ENABLE_LINEAR_SLEW
 			targetServoPWMAngle[servoNumber] = degreesToPWM(tmp);
 			// Start linear slew timer
 			HAL_TIM_Base_Start_IT(&htim7);
@@ -348,13 +351,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 
 		// TODO: Optimize these assignments to avoid repeated computation
 		// Right horizontal servo
-		TIM1->CCR1 = degreesToPWM(floor(cosResult * 20.0f) + 135.0f + servo_home_offsets[0]);
+		TIM1->CCR1 = degreesToPWM(floor(cosResult * 17.5f) + 135.0f + servo_home_offsets[0]);
 		// Right vertical servo
-		TIM1->CCR2 = degreesToPWM(floor(sinResult * 20.0f) + 135.0f + servo_home_offsets[1]);
+		TIM1->CCR2 = degreesToPWM(floor(sinResult * 17.5f) + 135.0f + servo_home_offsets[1]);
 		// Left horizontal servo
-		TIM1->CCR3 = degreesToPWM(floor(cosResult * 20.0f) + 135.0f + servo_home_offsets[2]);
+		TIM1->CCR3 = degreesToPWM(floor(cosResult * 17.5f) + 135.0f + servo_home_offsets[2]);
 		// Left vertical servo
-		TIM1->CCR4 = degreesToPWM(floor(sinResult * 20.0f) + 135.0f + servo_home_offsets[3]);
+		TIM1->CCR4 = degreesToPWM(floor(sinResult * 17.5f) + 135.0f + servo_home_offsets[3]);
 
 //		// Quadrature mode
 //		TIM1->CCR1 = degreesToPWM(floor(sinResult * 90.0f) + 90.0f);
@@ -451,11 +454,10 @@ int main(void)
   TIM1->CCR2 = 0;
   TIM1->CCR3 = 0;
   TIM1->CCR4 = 0;
-  // Same with the target values
-  targetServoPWMAngle[0] = 0;
-  targetServoPWMAngle[1] = 0;
-  targetServoPWMAngle[2] = 0;
-  targetServoPWMAngle[3] = 0;
+  targetServoPWMAngle[0] = degreesToPWM(135 + servo_home_offsets[0]);
+  targetServoPWMAngle[1] = degreesToPWM(135 + servo_home_offsets[1]);
+  targetServoPWMAngle[2] = degreesToPWM(135 + servo_home_offsets[2]);
+  targetServoPWMAngle[3] = degreesToPWM(135 + servo_home_offsets[3]);
 
   // Start servo PWM
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
