@@ -202,11 +202,8 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 			// Extract servo number from LSB of identifier
 			uint8_t servoNumber = rxHeader.Identifier & 0x00F;
 
-			// Add homing offset
-			tmp += servo_home_offsets[servoNumber];
-
 #ifdef ENABLE_LINEAR_SLEW
-			targetServoPWMAngle[servoNumber] = degreesToPWM(tmp);
+			targetServoPWMAngle[servoNumber] = degreesToPWM(tmp + servo_home_offsets[servoNumber]);
 			// Start linear slew timer
 			HAL_TIM_Base_Start_IT(&htim7);
 #else
