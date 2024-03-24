@@ -40,8 +40,6 @@
 
 #define ENABLE_LINEAR_SLEW
 
-// TODO: Determine these values experimentally by homing each segment
-
 // Define offset array based on CAN ID
 #if SEGMENT_BASE_CAN_ID == 0x10
 int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, 0, 15, 20};
@@ -203,7 +201,33 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 			uint8_t servoNumber = rxHeader.Identifier & 0x00F;
 
 #ifdef ENABLE_LINEAR_SLEW
-			targetServoPWMAngle[servoNumber] = degreesToPWM(tmp + servo_home_offsets[servoNumber]);
+			uint16_t tmpTargetValue = degreesToPWM(tmp + servo_home_offsets[servoNumber]);
+
+			// Directly set PWM value of servo to target value if target is 0
+			// Functionally, this skips linear slew if the servo has not been addressed since last power on
+			// This fixes an issue where the servo would jerk towards zero as it linearly slewed from 0 degrees
+				// to the target when set to a non-zero position after first power on.
+			if(targetServoPWMAngle[servoNumber] == 0)
+			{
+				switch(servoNumber)
+				{
+					case 0x0:
+						TIM1->CCR1 = tmpTargetValue;
+						break;
+					case 0x1:
+						TIM1->CCR2 = tmpTargetValue;
+						break;
+					case 0x2:
+						TIM1->CCR3 = tmpTargetValue;
+						break;
+					case 0x3:
+						TIM1->CCR4 = tmpTargetValue;
+						break;
+				}
+			}
+
+			targetServoPWMAngle[servoNumber] = tmpTargetValue;
+
 			// Start linear slew timer
 			HAL_TIM_Base_Start_IT(&htim7);
 #else
@@ -451,10 +475,15 @@ int main(void)
   TIM1->CCR2 = 0;
   TIM1->CCR3 = 0;
   TIM1->CCR4 = 0;
-  targetServoPWMAngle[0] = degreesToPWM(135 + servo_home_offsets[0]);
-  targetServoPWMAngle[1] = degreesToPWM(135 + servo_home_offsets[1]);
-  targetServoPWMAngle[2] = degreesToPWM(135 + servo_home_offsets[2]);
-  targetServoPWMAngle[3] = degreesToPWM(135 + servo_home_offsets[3]);
+
+  // Same with the target values
+  // Initializing them to the home position (135 degrees) doesn't work
+	  // because setting the position of one motor will suddenly cause all of them
+	  // to move at once if it is the first command received since last power on
+  targetServoPWMAngle[0] = 0;
+  targetServoPWMAngle[1] = 0;
+  targetServoPWMAngle[2] = 0;
+  targetServoPWMAngle[3] = 0;
 
   // Start servo PWM
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
