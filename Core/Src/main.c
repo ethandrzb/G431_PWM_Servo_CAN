@@ -36,9 +36,9 @@
 /* USER CODE BEGIN PD */
 #define SEGMENT_BASE_CAN_ID 0x10
 
-#define HORIZONTAL_STRIDE_AMPLITUDE 17.5f
+#define HORIZONTAL_STRIDE_AMPLITUDE 12.5f
 
-#define VERTICAL_STRIDE_AMPLITUDE 35.0f
+#define VERTICAL_STRIDE_AMPLITUDE 17.5f   // Might be lower for body segments
 
 #define SERVO_OFFSET_ARRAY_LENGTH 4
 
@@ -46,7 +46,7 @@
 
 // Define offset array based on CAN ID
 #if SEGMENT_BASE_CAN_ID == 0x10
-int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, 0, 15, 20};
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, 0, 15, 5};
 #elif SEGMENT_BASE_CAN_ID == 0x20
 int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {5, -10, 0, 0};
 #elif SEGMENT_BASE_CAN_ID == 0x30
@@ -81,7 +81,7 @@ TIM_HandleTypeDef htim7;
 
 /* USER CODE BEGIN PV */
 // 60 degree phase difference between each segment
-uint16_t phaseAngle = 0 + 60 * ((SEGMENT_BASE_CAN_ID >> 4) - 1);
+uint16_t phaseAngle = 0 + 120 * ((SEGMENT_BASE_CAN_ID >> 4) - 1);
 
 uint16_t targetServoPWMAngle[4];
 bool saveWavePositions = false;
