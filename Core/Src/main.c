@@ -21,10 +21,12 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "BMP180.h"
 #include "dht11.h"
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -72,6 +74,8 @@ CORDIC_HandleTypeDef hcordic;
 
 FDCAN_HandleTypeDef hfdcan1;
 
+I2C_HandleTypeDef hi2c1;
+
 UART_HandleTypeDef hlpuart1;
 
 TIM_HandleTypeDef htim1;
@@ -93,7 +97,7 @@ uint8_t txData[8];
 
 uint8_t UARTTxBuffer[30];
 
-const peripheralType connectedPeripheral = PERIPHERAL_NONE;
+const peripheralType connectedPeripheral = PERIPHERAL_TEMP_PRESSURE_ALTITUDE_BMP180;
 
 volatile bool receivedRequestForPeripheralData = false;
 /* USER CODE END PV */
@@ -108,6 +112,7 @@ static void MX_CORDIC_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_TIM7_Init(void);
 static void MX_TIM4_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 uint32_t degreesToPWM(float degrees);
 uint16_t speedToWaveTimerPeriod(int8_t speed);
@@ -317,6 +322,10 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 					DHT11_CancelOperation();
 					receivedRequestForPeripheralData = true;
 					break;
+				// TODO: Add non-blocking modes to BMP180 library
+				case PERIPHERAL_TEMP_PRESSURE_ALTITUDE_BMP180:
+					receivedRequestForPeripheralData = true;
+					break;
 				//TODO: Add support for more peripherals
 			}
 		}
@@ -472,6 +481,7 @@ int main(void)
   MX_TIM6_Init();
   MX_TIM7_Init();
   MX_TIM4_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
   // Initialize PWM to 0
@@ -520,6 +530,12 @@ int main(void)
   // Init delay timer for DHT11
   HAL_TIM_Base_Start(&htim4);
 
+  // Read calibration data from BMP180 sensor if connected
+  if(connectedPeripheral == PERIPHERAL_TEMP_PRESSURE_ALTITUDE_BMP180)
+  {
+	  BMP180_Start();
+  }
+
   HAL_FDCAN_Start(&hfdcan1);
   HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
 
@@ -529,40 +545,63 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  // Add conditions for additional
+	  // Add conditions for additional peripherals
 	  if(receivedRequestForPeripheralData)
 	  {
-		// FDCAN interrupts could be disabled here too,
-		// but that risks creating a situation where the MCU
-		// is stuck trying to read data from the sensor and is unable
-		// to be "unstuck" by triggering another interrupt.
-		HAL_NVIC_DisableIRQ(TIM6_DAC_IRQn);
-		HAL_NVIC_DisableIRQ(TIM7_IRQn);
-		// ****************************************
-		// CRITICAL TASK -- MUST NOT BE INTERRUPTED
-		dht11DataBytes result = DHT11_GetDataBytes();
-		// ****************************************
-		HAL_NVIC_EnableIRQ(TIM6_DAC_IRQn);
-		HAL_NVIC_EnableIRQ(TIM7_IRQn);
-
-		txData[1] = result.humidityIntegerByte;
-		txData[2] = result.humidityDecimalByte;
-		txData[3] = result.temperatureIntegerByte;
-		txData[4] = result.temperatureDecimalByte;
-		txData[5] = result.checksum;
-
-		// Stop trying if checksum passes
-		if(txData[5] == txData[1] + txData[2] + txData[3] + txData[4])
+		switch(connectedPeripheral)
 		{
-			receivedRequestForPeripheralData = false;
+			case PERIPHERAL_NONE:
+				receivedRequestForPeripheralData = false;
+				break;
+			case PERIPHERAL_TEMP_HUMIDITY_DHT11:
+				// FDCAN interrupts could be disabled here too,
+				// but that risks creating a situation where the MCU
+				// is stuck trying to read data from the sensor and is unable
+				// to be "unstuck" by triggering another interrupt.
+				HAL_NVIC_DisableIRQ(TIM6_DAC_IRQn);
+				HAL_NVIC_DisableIRQ(TIM7_IRQn);
+				// ****************************************
+				// CRITICAL TASK -- MUST NOT BE INTERRUPTED
+				dht11DataBytes result = DHT11_GetDataBytes();
+				// ****************************************
+				HAL_NVIC_EnableIRQ(TIM6_DAC_IRQn);
+				HAL_NVIC_EnableIRQ(TIM7_IRQn);
 
-			txHeader.DataLength = FDCAN_DLC_BYTES_8;
-			HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &txHeader, txData);
+				txData[1] = result.humidityIntegerByte;
+				txData[2] = result.humidityDecimalByte;
+				txData[3] = result.temperatureIntegerByte;
+				txData[4] = result.temperatureDecimalByte;
+				txData[5] = result.checksum;
+
+				// Stop trying if checksum passes
+				if(txData[5] == txData[1] + txData[2] + txData[3] + txData[4])
+				{
+					receivedRequestForPeripheralData = false;
+
+					txHeader.DataLength = FDCAN_DLC_BYTES_8;
+					HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &txHeader, txData);
+					HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+				}
+				else
+				{
+					HAL_Delay(500);
+				}
+				break;
+
+			// TODO: Report temperature and altitude from BMP180
+			// Maybe add a byte between the sensor type and reported value to indicate
+				// which value from the sensor is being reported
+			case PERIPHERAL_TEMP_PRESSURE_ALTITUDE_BMP180:
+				BMP180_GetTemp(); // Needed for temperature compensation for pressure calculation
+				float pressure = BMP180_GetPress(0);
+				memcpy(&(txData[1]), &pressure, sizeof(float));
+				txHeader.DataLength = FDCAN_DLC_BYTES_8;
+
+				receivedRequestForPeripheralData = false;
+				HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &txHeader, txData);
+				HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+				break;
 		}
-
-		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-
-		HAL_Delay(500);
 	  }
     /* USER CODE END WHILE */
 
@@ -716,6 +755,54 @@ static void MX_FDCAN1_Init(void)
     // ****************************************
     HAL_FDCAN_ConfigGlobalFilter(&hfdcan1, FDCAN_REJECT, FDCAN_REJECT, FDCAN_FILTER_REMOTE, FDCAN_REJECT_REMOTE);
   /* USER CODE END FDCAN1_Init 2 */
+
+}
+
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.Timing = 0x10802D9B;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
 
 }
 
