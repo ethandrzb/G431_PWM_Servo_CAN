@@ -310,6 +310,8 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 			switch(connectedPeripheral)
 			{
 				case PERIPHERAL_NONE:
+					txHeader.DataLength = FDCAN_DLC_BYTES_8;
+					HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &txHeader, txData);
 					break;
 				case PERIPHERAL_TEMP_HUMIDITY_DHT11:
 					DHT11_CancelOperation();
