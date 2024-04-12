@@ -71,6 +71,8 @@ void Error_Handler(void);
 #define LPUART1_TX_GPIO_Port GPIOA
 #define LPUART1_RX_Pin GPIO_PIN_3
 #define LPUART1_RX_GPIO_Port GPIOA
+#define HEARTBEAT_LED_Pin GPIO_PIN_4
+#define HEARTBEAT_LED_GPIO_Port GPIOA
 #define LD2_Pin GPIO_PIN_5
 #define LD2_GPIO_Port GPIOA
 #define DHT11_SERIAL_Pin GPIO_PIN_15

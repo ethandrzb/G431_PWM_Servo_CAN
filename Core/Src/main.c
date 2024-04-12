@@ -54,7 +54,7 @@ int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {5, -10, 0, 0};
 #elif SEGMENT_BASE_CAN_ID == 0x30
 int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {45, 5, 5, 0};
 #elif SEGMENT_BASE_CAN_ID == 0x40
-int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, -15, 43, -5};
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, -15, 53, -5};
 #elif SEGMENT_BASE_CAN_ID == 0x50
 int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {-45, -10, 45, -45};
 #endif
@@ -97,7 +97,7 @@ uint8_t txData[8];
 
 uint8_t UARTTxBuffer[30];
 
-const peripheralType connectedPeripheral = PERIPHERAL_TEMP_PRESSURE_ALTITUDE_BMP180;
+const peripheralType connectedPeripheral = PERIPHERAL_NONE;
 
 volatile bool receivedRequestForPeripheralData = false;
 /* USER CODE END PV */
@@ -302,7 +302,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 				txHeader.DataLength = FDCAN_DLC_BYTES_1;
 				HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &txHeader, txData);
 
-				HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+				HAL_GPIO_TogglePin(HEARTBEAT_LED_GPIO_Port, HEARTBEAT_LED_Pin);
 			}
 		}
 		// Sensor data request
@@ -1085,7 +1085,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, HEARTBEAT_LED_Pin|LD2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(DHT11_SERIAL_GPIO_Port, DHT11_SERIAL_Pin, GPIO_PIN_RESET);
@@ -1096,12 +1096,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : LD2_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin;
+  /*Configure GPIO pins : HEARTBEAT_LED_Pin LD2_Pin */
+  GPIO_InitStruct.Pin = HEARTBEAT_LED_Pin|LD2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : DHT11_SERIAL_Pin */
   GPIO_InitStruct.Pin = DHT11_SERIAL_Pin;
