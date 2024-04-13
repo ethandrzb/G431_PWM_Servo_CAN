@@ -48,13 +48,14 @@
 
 // Define offset array based on CAN ID
 #if SEGMENT_BASE_CAN_ID == 0x10
-int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, 0, 15, 5};
+// Homes for vertical servos (0x11 and 0x13) on head segment offset by 10 degrees to prop up head
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, 10, 15, -5};
 #elif SEGMENT_BASE_CAN_ID == 0x20
 int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {5, -10, 0, 0};
 #elif SEGMENT_BASE_CAN_ID == 0x30
 int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {45, 5, 5, 0};
 #elif SEGMENT_BASE_CAN_ID == 0x40
-int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, -15, 53, -5};
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, -15, 63, -5};
 #elif SEGMENT_BASE_CAN_ID == 0x50
 int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {-45, -10, 45, -45};
 #endif
@@ -84,7 +85,7 @@ TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim7;
 
 /* USER CODE BEGIN PV */
-// 60 degree phase difference between each segment
+// 120 degree phase difference between each segment
 uint16_t phaseAngle = 0 + 120 * ((SEGMENT_BASE_CAN_ID >> 4) - 1);
 
 uint16_t targetServoPWMAngle[4];
@@ -735,12 +736,12 @@ static void MX_FDCAN1_Init(void)
   	  Error_Handler();
     }
 
-    // Accept messages from 0xFF (broadcast)
+    // Accept messages from 0x7Fx (broadcast)
 	sFilterConfig.IdType = FDCAN_STANDARD_ID;
 	sFilterConfig.FilterIndex = 1;
 	sFilterConfig.FilterType = FDCAN_FILTER_MASK;
 	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
-	sFilterConfig.FilterID1 = 0x0FF;
+	sFilterConfig.FilterID1 = 0x7F0;
 	sFilterConfig.FilterID2 = 0x7FC;
 
 	if(HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK)
