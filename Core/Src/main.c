@@ -49,20 +49,22 @@
 // Define offset array based on CAN ID
 #if SEGMENT_BASE_CAN_ID == 0x10
 // Homes for vertical servos (0x11 and 0x13) on head segment offset by 10 degrees to prop up head
-int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, 10, 15, -5};
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, 10, 15, -15};
 #elif SEGMENT_BASE_CAN_ID == 0x20
 int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {5, -10, 0, 0};
 #elif SEGMENT_BASE_CAN_ID == 0x30
 int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {45, 5, 5, 0};
 #elif SEGMENT_BASE_CAN_ID == 0x40
-int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, -15, 63, -5};
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, -25, 58, -5};
 #elif SEGMENT_BASE_CAN_ID == 0x50
-int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {-45, -10, 45, -45};
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {-45, -20, 45, -45};
 #endif
 
 #define PI 3.1415926535897932384626433
 
 #define q31_to_f32(x) ldexp((int32_t) x, -31)
+
+#define MAX(x,y) (x > y) ? x : y
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -383,6 +385,18 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 
 		cosResult = cordic_q31_cosf(radian);
 		sinResult = cordic_q31_sinf(radian);
+
+    //TODO: Move the logic to clip the result of the sin function to the individual calculations below
+    // Different parts of the waveform need to be clipped for the left and right vertical servos
+		// Legs on head should not dig into the ground as much as the body
+		// if(SEGMENT_BASE_CAN_ID != 0x10)
+		// {
+		// 	sinResult = MAX(sinResult, -0.1f);
+		// }
+		// else
+		// {
+		// 	sinResult = MAX(sinResult, 0.0f);
+		// }
 
 		// TODO: Add stride length parameter
 
