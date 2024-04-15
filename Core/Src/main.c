@@ -82,6 +82,7 @@ I2C_HandleTypeDef hi2c1;
 UART_HandleTypeDef hlpuart1;
 
 TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim7;
@@ -116,6 +117,7 @@ static void MX_TIM6_Init(void);
 static void MX_TIM7_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 uint32_t degreesToPWM(float degrees);
 uint16_t speedToWaveTimerPeriod(int8_t speed);
@@ -179,7 +181,8 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 		// Retrieve message
 		if(HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rxHeader, rxData) != HAL_OK)
 		{
-			Error_Handler();
+			// Don't parse corrupted messages
+			return;
 		}
 
 		// Check header length
@@ -304,6 +307,11 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 				txData[0] = SEGMENT_BASE_CAN_ID;
 				txHeader.DataLength = FDCAN_DLC_BYTES_1;
 				HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &txHeader, txData);
+
+				// Reset FDCAN watchdog
+				HAL_TIM_Base_Stop_IT(&htim2);
+				__HAL_TIM_SET_COUNTER(&htim2, 1);
+				HAL_TIM_Base_Start_IT(&htim2);
 
 				HAL_GPIO_TogglePin(HEARTBEAT_LED_GPIO_Port, HEARTBEAT_LED_Pin);
 			}
@@ -457,6 +465,20 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 		}
 	}
 #endif
+	// FDCAN watchdog timer
+	else if(htim == &htim2)
+	{
+		HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+
+		// Reset FDCAN interface
+		HAL_FDCAN_Stop(&hfdcan1);
+
+		// Might not need this
+		MX_FDCAN1_Init();
+
+		HAL_FDCAN_Start(&hfdcan1);
+		HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+	}
 }
 /* USER CODE END 0 */
 
@@ -497,6 +519,7 @@ int main(void)
   MX_TIM7_Init();
   MX_TIM4_Init();
   MX_I2C1_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
   // Initialize PWM to 0
@@ -542,7 +565,7 @@ int main(void)
   txHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
   txHeader.MessageMarker = 0;
 
-  // Init delay timer for DHT11
+  // Start delay timer for DHT11
   HAL_TIM_Base_Start(&htim4);
 
   // Read calibration data from BMP180 sensor if connected
@@ -553,6 +576,10 @@ int main(void)
 
   HAL_FDCAN_Start(&hfdcan1);
   HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+
+  // Start FDCAN watchdog timer
+  // The interface frequently gets stuck in the "busy" state, so this lets us know when to reset it
+  HAL_TIM_Base_Start_IT(&htim2);
 
   /* USER CODE END 2 */
 
@@ -608,8 +635,8 @@ int main(void)
 				// which value from the sensor is being reported
 			case PERIPHERAL_TEMP_PRESSURE_ALTITUDE_BMP180:
 				BMP180_GetTemp(); // Needed for temperature compensation for pressure calculation
-				float pressure = BMP180_GetPress(0);
-				memcpy(&(txData[1]), &pressure, sizeof(float));
+				uint32_t pressure = BMP180_GetPress(0);
+				memcpy(&(txData[1]), &pressure, sizeof(uint32_t));
 				txHeader.DataLength = FDCAN_DLC_BYTES_8;
 
 				receivedRequestForPeripheralData = false;
@@ -959,6 +986,51 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 2 */
   HAL_TIM_MspPostInit(&htim1);
+
+}
+
+/**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 170-1;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 4999999;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
 
 }
 
