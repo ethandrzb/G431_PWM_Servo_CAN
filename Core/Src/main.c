@@ -40,7 +40,9 @@
 
 #define HORIZONTAL_STRIDE_AMPLITUDE 12.5f
 
-#define VERTICAL_STRIDE_AMPLITUDE 17.5f   // Might be lower for body segments
+// 25.0f for body segments
+// 30.0f for head segment
+#define VERTICAL_STRIDE_AMPLITUDE 30.0f
 
 #define SERVO_OFFSET_ARRAY_LENGTH 4
 
@@ -1010,7 +1012,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 170-1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 4999999;
+  htim2.Init.Period = 2749999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
