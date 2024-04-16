@@ -38,11 +38,23 @@
 /* USER CODE BEGIN PD */
 #define SEGMENT_BASE_CAN_ID 0x10
 
-#define HORIZONTAL_STRIDE_AMPLITUDE 12.5f
+// -= Body Segments =-
+// 12.5f for horizontal servos
+// 25.0f for vertical servos
 
-// 25.0f for body segments
-// 30.0f for head segment
+// -= Head Segment =-
+// 30.0f for horizontal servos
+// 30.0f for vertical servos
+#if SEGMENT_BASE_CAN_ID == 0x10
+#define HORIZONTAL_STRIDE_AMPLITUDE 30.0f
 #define VERTICAL_STRIDE_AMPLITUDE 30.0f
+#elif SEGMENT_BASE_CAN_ID == 0x50
+#define HORIZONTAL_STRIDE_AMPLITUDE 30.0f
+#define VERTICAL_STRIDE_AMPLITUDE 30.0f
+#else
+#define HORIZONTAL_STRIDE_AMPLITUDE 12.5f
+#define VERTICAL_STRIDE_AMPLITUDE 25.0f
+#endif
 
 #define SERVO_OFFSET_ARRAY_LENGTH 4
 
@@ -57,7 +69,7 @@ int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {5, -10, 0, 0};
 #elif SEGMENT_BASE_CAN_ID == 0x30
 int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {45, 5, 5, 0};
 #elif SEGMENT_BASE_CAN_ID == 0x40
-int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, -25, 58, -5};
+int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {0, -25, 65, -5};
 #elif SEGMENT_BASE_CAN_ID == 0x50
 int8_t servo_home_offsets[SERVO_OFFSET_ARRAY_LENGTH] = {-45, -20, 45, -45};
 #endif
@@ -396,20 +408,27 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 		cosResult = cordic_q31_cosf(radian);
 		sinResult = cordic_q31_sinf(radian);
 
-    //TODO: Move the logic to clip the result of the sin function to the individual calculations below
-    // Different parts of the waveform need to be clipped for the left and right vertical servos
-		// Legs on head should not dig into the ground as much as the body
-		// if(SEGMENT_BASE_CAN_ID != 0x10)
-		// {
-		// 	sinResult = MAX(sinResult, -0.1f);
-		// }
-		// else
-		// {
-		// 	sinResult = MAX(sinResult, 0.0f);
-		// }
-
-		// TODO: Add stride length parameter
-
+#if SEGMENT_BASE_CAN_ID == 0x10
+		// TODO: Optimize these assignments to avoid repeated computation
+		// Right horizontal servo
+		TIM1->CCR1 = degreesToPWM(floor(cosResult * HORIZONTAL_STRIDE_AMPLITUDE) + 135.0f + 17.5f + servo_home_offsets[0]);
+		// Right vertical servo
+		TIM1->CCR2 = degreesToPWM(floor(sinResult * VERTICAL_STRIDE_AMPLITUDE) + 135.0f + servo_home_offsets[1]);
+		// Left horizontal servo
+		TIM1->CCR3 = degreesToPWM(floor(cosResult * HORIZONTAL_STRIDE_AMPLITUDE) + 135.0f - 17.5f + servo_home_offsets[2]);
+		// Left vertical servo
+		TIM1->CCR4 = degreesToPWM(floor(sinResult * VERTICAL_STRIDE_AMPLITUDE) + 135.0f + servo_home_offsets[3]);
+#elif SEGMENT_BASE_CAN_ID == 0x50
+		// TODO: Optimize these assignments to avoid repeated computation
+		// Right horizontal servo
+		TIM1->CCR1 = degreesToPWM(floor(cosResult * HORIZONTAL_STRIDE_AMPLITUDE) + 135.0f - 17.5f + servo_home_offsets[0]);
+		// Right vertical servo
+		TIM1->CCR2 = degreesToPWM(floor(sinResult * VERTICAL_STRIDE_AMPLITUDE) + 135.0f + servo_home_offsets[1]);
+		// Left horizontal servo
+		TIM1->CCR3 = degreesToPWM(floor(cosResult * HORIZONTAL_STRIDE_AMPLITUDE) + 135.0f + 17.5f + servo_home_offsets[2]);
+		// Left vertical servo
+		TIM1->CCR4 = degreesToPWM(floor(sinResult * VERTICAL_STRIDE_AMPLITUDE) + 135.0f + servo_home_offsets[3]);
+#else
 		// TODO: Optimize these assignments to avoid repeated computation
 		// Right horizontal servo
 		TIM1->CCR1 = degreesToPWM(floor(cosResult * HORIZONTAL_STRIDE_AMPLITUDE) + 135.0f + servo_home_offsets[0]);
@@ -419,6 +438,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 		TIM1->CCR3 = degreesToPWM(floor(cosResult * HORIZONTAL_STRIDE_AMPLITUDE) + 135.0f + servo_home_offsets[2]);
 		// Left vertical servo
 		TIM1->CCR4 = degreesToPWM(floor(sinResult * VERTICAL_STRIDE_AMPLITUDE) + 135.0f + servo_home_offsets[3]);
+#endif
 
 //		// Quadrature mode
 //		TIM1->CCR1 = degreesToPWM(floor(sinResult * 90.0f) + 90.0f);
